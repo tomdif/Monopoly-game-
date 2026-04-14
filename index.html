@@ -1,0 +1,253 @@
+// board-render.js - Renders the Monopoly board
+
+const BOARD_DATA = [
+  { id: 0, name: "GO", type: "go" },
+  { id: 1, name: "Mediterranean Ave", type: "property", color: "brown", price: 60, group: 1 },
+  { id: 2, name: "Community Chest", type: "community_chest" },
+  { id: 3, name: "Baltic Ave", type: "property", color: "brown", price: 60, group: 1 },
+  { id: 4, name: "Income Tax", type: "tax", amount: 200 },
+  { id: 5, name: "Reading Railroad", type: "railroad", price: 200 },
+  { id: 6, name: "Oriental Ave", type: "property", color: "lightblue", price: 100, group: 2 },
+  { id: 7, name: "Chance", type: "chance" },
+  { id: 8, name: "Vermont Ave", type: "property", color: "lightblue", price: 100, group: 2 },
+  { id: 9, name: "Connecticut Ave", type: "property", color: "lightblue", price: 120, group: 2 },
+  { id: 10, name: "Jail", type: "jail" },
+  { id: 11, name: "St. Charles", type: "property", color: "pink", price: 140, group: 3 },
+  { id: 12, name: "Electric Co.", type: "utility", price: 150 },
+  { id: 13, name: "States Ave", type: "property", color: "pink", price: 140, group: 3 },
+  { id: 14, name: "Virginia Ave", type: "property", color: "pink", price: 160, group: 3 },
+  { id: 15, name: "Penn. Railroad", type: "railroad", price: 200 },
+  { id: 16, name: "St. James", type: "property", color: "orange", price: 180, group: 4 },
+  { id: 17, name: "Community Chest", type: "community_chest" },
+  { id: 18, name: "Tennessee Ave", type: "property", color: "orange", price: 180, group: 4 },
+  { id: 19, name: "New York Ave", type: "property", color: "orange", price: 200, group: 4 },
+  { id: 20, name: "Free Parking", type: "free_parking" },
+  { id: 21, name: "Kentucky Ave", type: "property", color: "red", price: 220, group: 5 },
+  { id: 22, name: "Chance", type: "chance" },
+  { id: 23, name: "Indiana Ave", type: "property", color: "red", price: 220, group: 5 },
+  { id: 24, name: "Illinois Ave", type: "property", color: "red", price: 240, group: 5 },
+  { id: 25, name: "B&O Railroad", type: "railroad", price: 200 },
+  { id: 26, name: "Atlantic Ave", type: "property", color: "yellow", price: 260, group: 6 },
+  { id: 27, name: "Ventnor Ave", type: "property", color: "yellow", price: 260, group: 6 },
+  { id: 28, name: "Water Works", type: "utility", price: 150 },
+  { id: 29, name: "Marvin Gardens", type: "property", color: "yellow", price: 280, group: 6 },
+  { id: 30, name: "Go To Jail", type: "go_to_jail" },
+  { id: 31, name: "Pacific Ave", type: "property", color: "green", price: 300, group: 7 },
+  { id: 32, name: "N. Carolina", type: "property", color: "green", price: 300, group: 7 },
+  { id: 33, name: "Community Chest", type: "community_chest" },
+  { id: 34, name: "Penn. Ave", type: "property", color: "green", price: 320, group: 7 },
+  { id: 35, name: "Short Line RR", type: "railroad", price: 200 },
+  { id: 36, name: "Chance", type: "chance" },
+  { id: 37, name: "Park Place", type: "property", color: "darkblue", price: 350, group: 8 },
+  { id: 38, name: "Luxury Tax", type: "tax", amount: 100 },
+  { id: 39, name: "Boardwalk", type: "property", color: "darkblue", price: 400, group: 8 },
+];
+
+// Grid positions [col, row] (1-indexed, 11x11 grid)
+// Bottom row: 0-10, Left col: 11-20, Top row: 21-31, Right col: 32-39
+function getGridPosition(id) {
+  if (id <= 10) {
+    // Bottom row: right to left, col = 11-id, row = 11
+    return { col: 11 - id, row: 11 };
+  } else if (id <= 20) {
+    // Left col: bottom to top, col = 1, row = 11 - (id - 10)
+    return { col: 1, row: 11 - (id - 10) };
+  } else if (id <= 30) {
+    // Top row: left to right, col = 1 + (id - 20), row = 1
+    return { col: 1 + (id - 20), row: 1 };
+  } else {
+    // Right col: top to bottom, col = 11, row = 1 + (id - 30)
+    return { col: 11, row: 1 + (id - 30) };
+  }
+}
+
+const TYPE_ICONS = {
+  go: '🏁', jail: '🚔', go_to_jail: '👮', free_parking: '🅿️',
+  chance: '?', community_chest: '📦', tax: '💰', railroad: '🚂', utility: '⚡'
+};
+
+const COLOR_PLAYER = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+
+function buildBoard() {
+  const board = document.getElementById('monopoly-board');
+  // Clear existing cells (keep center)
+  const center = document.getElementById('board-center');
+  board.innerHTML = '';
+  board.appendChild(center);
+
+  BOARD_DATA.forEach(space => {
+    const cell = document.createElement('div');
+    const pos = getGridPosition(space.id);
+    cell.className = 'board-cell' + (['go','jail','go_to_jail','free_parking'].includes(space.type) ? ' corner' : '');
+    cell.style.gridColumn = pos.col;
+    cell.style.gridRow = pos.row;
+    cell.id = `cell-${space.id}`;
+    cell.dataset.spaceId = space.id;
+
+    // Side cells need rotated text
+    const isLeft = space.id > 10 && space.id < 20;
+    const isRight = space.id > 30;
+    const isTop = space.id > 20 && space.id < 30;
+    const isBottom = space.id > 0 && space.id < 10;
+
+    // Color bar
+    if (space.color) {
+      const bar = document.createElement('div');
+      bar.className = `cell-color-bar color-${space.color}`;
+      // Bar is at top for bottom row, bottom for top row, left/right for sides
+      if (isBottom) {
+        bar.style.cssText = 'height:18%;min-height:10px;width:100%;position:absolute;top:0;';
+      } else if (isTop) {
+        bar.style.cssText = 'height:18%;min-height:10px;width:100%;position:absolute;bottom:0;';
+      } else if (isLeft) {
+        bar.style.cssText = 'width:18%;min-width:10px;height:100%;position:absolute;right:0;top:0;';
+      } else if (isRight) {
+        bar.style.cssText = 'width:18%;min-width:10px;height:100%;position:absolute;left:0;top:0;';
+      }
+      cell.appendChild(bar);
+    }
+
+    // Houses container
+    const housesDiv = document.createElement('div');
+    housesDiv.className = 'cell-houses';
+    housesDiv.id = `houses-${space.id}`;
+    if (isBottom) housesDiv.style.cssText = 'position:absolute;bottom:2px;';
+    else if (isTop) housesDiv.style.cssText = 'position:absolute;top:2px;';
+    else if (isLeft) housesDiv.style.cssText = 'position:absolute;left:2px;';
+    else if (isRight) housesDiv.style.cssText = 'position:absolute;right:2px;';
+    cell.appendChild(housesDiv);
+
+    // Cell content
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'cell-bottom';
+
+    const icon = document.createElement('div');
+    icon.style.fontSize = 'clamp(8px,1.5vw,14px)';
+    icon.textContent = TYPE_ICONS[space.type] || '';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'cell-name';
+
+    const priceEl = document.createElement('div');
+    priceEl.className = 'cell-price';
+
+    if (space.type === 'go') { nameEl.textContent = '⮕ GO'; }
+    else if (space.type === 'jail') { nameEl.innerHTML = 'JAIL<br>Visiting'; }
+    else if (space.type === 'go_to_jail') { nameEl.innerHTML = 'GO TO<br>JAIL'; }
+    else if (space.type === 'free_parking') { nameEl.innerHTML = 'FREE<br>PARKING'; }
+    else {
+      nameEl.textContent = space.name;
+      if (space.price) priceEl.textContent = `$${space.price}`;
+    }
+
+    if (isLeft || isRight) {
+      contentDiv.style.writingMode = 'vertical-rl';
+      if (isLeft) contentDiv.style.transform = 'rotate(180deg)';
+    }
+
+    contentDiv.appendChild(icon);
+    contentDiv.appendChild(nameEl);
+    if (space.price) contentDiv.appendChild(priceEl);
+    cell.appendChild(contentDiv);
+
+    // Mortgaged overlay
+    const mortgagedDiv = document.createElement('div');
+    mortgagedDiv.className = 'mortgaged-overlay';
+    mortgagedDiv.id = `mortgaged-${space.id}`;
+    mortgagedDiv.textContent = 'MORTGAGED';
+    mortgagedDiv.style.display = 'none';
+    cell.appendChild(mortgagedDiv);
+
+    // Owner dot
+    const ownerDot = document.createElement('div');
+    ownerDot.className = 'owner-dot';
+    ownerDot.id = `owner-${space.id}`;
+    ownerDot.style.display = 'none';
+    cell.appendChild(ownerDot);
+
+    cell.addEventListener('click', () => {
+      if (window.onCellClick) window.onCellClick(space.id);
+    });
+
+    board.appendChild(cell);
+  });
+}
+
+function updateBoardProperties(properties, players) {
+  const playerColors = {};
+  players.forEach((p, i) => { playerColors[p.id] = COLOR_PLAYER[i % COLOR_PLAYER.length]; });
+
+  BOARD_DATA.forEach(space => {
+    const prop = properties[space.id];
+    const mortgagedEl = document.getElementById(`mortgaged-${space.id}`);
+    const ownerDotEl = document.getElementById(`owner-${space.id}`);
+    const housesEl = document.getElementById(`houses-${space.id}`);
+
+    if (mortgagedEl) mortgagedEl.style.display = prop?.mortgaged ? 'flex' : 'none';
+    if (ownerDotEl) {
+      if (prop?.ownerId) {
+        ownerDotEl.style.display = 'block';
+        ownerDotEl.style.background = playerColors[prop.ownerId] || '#fff';
+      } else {
+        ownerDotEl.style.display = 'none';
+      }
+    }
+    if (housesEl) {
+      housesEl.innerHTML = '';
+      if (prop?.houses > 0) {
+        if (prop.houses === 5) {
+          const h = document.createElement('div');
+          h.className = 'hotel-indicator';
+          housesEl.appendChild(h);
+        } else {
+          for (let i = 0; i < prop.houses; i++) {
+            const h = document.createElement('div');
+            h.className = 'house-indicator';
+            housesEl.appendChild(h);
+          }
+        }
+      }
+    }
+  });
+}
+
+function updateTokenPositions(players) {
+  // Remove old tokens
+  document.querySelectorAll('.board-token').forEach(t => t.remove());
+  const positionCounts = {};
+
+  players.forEach((player, idx) => {
+    if (player.bankrupt) return;
+    const pos = player.position;
+    positionCounts[pos] = (positionCounts[pos] || 0);
+    const offset = positionCounts[pos];
+    positionCounts[pos]++;
+
+    const cell = document.getElementById(`cell-${pos}`);
+    if (!cell) return;
+    const rect = cell.getBoundingClientRect();
+    const boardRect = document.getElementById('monopoly-board').getBoundingClientRect();
+
+    const token = document.createElement('div');
+    token.className = 'board-token';
+    token.textContent = player.token;
+    token.title = player.name;
+
+    const cellSize = cell.offsetWidth;
+    const offX = (offset % 2) * (cellSize * 0.45);
+    const offY = Math.floor(offset / 2) * (cellSize * 0.45);
+    const left = (cell.offsetLeft + cell.offsetWidth * 0.1 + offX);
+    const top = (cell.offsetTop + cell.offsetHeight * 0.1 + offY);
+
+    token.style.left = left + 'px';
+    token.style.top = top + 'px';
+
+    document.getElementById('monopoly-board').appendChild(token);
+  });
+}
+
+window.BOARD_DATA = BOARD_DATA;
+window.buildBoard = buildBoard;
+window.updateBoardProperties = updateBoardProperties;
+window.updateTokenPositions = updateTokenPositions;
+window.COLOR_PLAYER = COLOR_PLAYER;
