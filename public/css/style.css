@@ -316,6 +316,7 @@ input[type=text]:focus { border-color: var(--green-light); }
 #modal-box {
   background: var(--card); border: 1px solid var(--border); border-radius: 16px;
   padding: 28px; max-width: 380px; width: 90%; box-shadow: var(--shadow);
+  max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
 #modal-title { font-family: 'Playfair Display', serif; font-size: 20px; color: var(--gold); margin-bottom: 12px; }
 #modal-body { font-size: 14px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
@@ -368,14 +369,35 @@ input[type=text]:focus { border-color: var(--green-light); }
 
 /* MOBILE ADJUSTMENTS */
 @media (max-width: 900px) {
-  #game-layout { flex-direction: column; }
+  html, body { overflow: auto; -webkit-overflow-scrolling: touch; }
+  #screen-game { position: relative; overflow: auto; }
+  #game-layout { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
   #panel-left { display: none; }
-  #panel-right { width: 100%; border-left: none; border-top: 1px solid var(--border); height: 220px; flex-direction: row; overflow-x: auto; overflow-y: hidden; }
-  #board-container { flex: 1; padding: 4px; }
+  #panel-right {
+    width: 100%; border-left: none; border-top: 1px solid var(--border);
+    flex-direction: column; flex-shrink: 0;
+    height: auto; min-height: 200px;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 40px;
+  }
+  #board-container { flex: 0 0 auto; padding: 4px; }
   #monopoly-board {
-    width: min(calc(100vw - 8px), calc(100vh - 240px));
-    height: min(calc(100vw - 8px), calc(100vh - 240px));
+    width: min(calc(100vw - 8px), calc(100vh - 260px));
+    height: min(calc(100vw - 8px), calc(100vh - 260px));
     grid-template-columns: 64px repeat(9, 1fr) 64px;
     grid-template-rows: 64px repeat(9, 1fr) 64px;
+  }
+  #my-properties-list {
+    max-height: none;
+    overflow-y: visible;
+  }
+  #action-btns .btn { min-height: 44px; }
+  .prop-item { min-height: 40px; }
+  #modal-box {
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

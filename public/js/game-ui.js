@@ -287,15 +287,45 @@ window.openTradeModal = function(gameState, myPlayerId) {
     .map(([id]) => window.BOARD_DATA?.[parseInt(id)])
     .filter(Boolean);
 
+  function getTargetProps(targetId) {
+    return Object.entries(gameState.properties)
+      .filter(([, prop]) => prop.ownerId === targetId)
+      .map(([id]) => window.BOARD_DATA?.[parseInt(id)])
+      .filter(Boolean);
+  }
+
+  function renderTargetProps(targetId) {
+    const container = document.getElementById('trade-to-props');
+    if (!container) return;
+    const targetProps = getTargetProps(targetId);
+    if (targetProps.length === 0) {
+      container.innerHTML = '<span style="font-size:12px;color:var(--text2);">No properties owned.</span>';
+    } else {
+      container.innerHTML = targetProps.map(s =>
+        `<label style="display:block;font-size:12px;padding:2px 0;"><input type="checkbox" value="${s.id}"> ${s.name}</label>`
+      ).join('');
+    }
+  }
+
+  const firstTarget = others[0].id;
+
   let body = `<div style="font-size:13px;">
     <label>Trade with:</label>
     <select id="trade-target" style="width:100%;margin:8px 0;padding:8px;background:#0f1e14;border:1px solid var(--border);border-radius:6px;color:var(--text);">
       ${others.map(p => `<option value="${p.id}">${p.token} ${p.name}</option>`).join('')}
     </select>
-    <label>You give money: $<input type="number" id="trade-from-money" value="0" min="0" style="width:80px;padding:4px;background:#0f1e14;border:1px solid var(--border);border-radius:4px;color:var(--text);" /></label>
-    <br><label>You receive money: $<input type="number" id="trade-to-money" value="0" min="0" style="width:80px;padding:4px;margin-top:8px;background:#0f1e14;border:1px solid var(--border);border-radius:4px;color:var(--text);" /></label>
-    ${myProps.length > 0 ? `<br><label style="display:block;margin-top:8px;">Your properties to give:</label>
-    <div id="trade-from-props">${myProps.map(s => `<label style="display:block;font-size:12px;"><input type="checkbox" value="${s.id}"> ${s.name}</label>`).join('')}</div>` : ''}
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:120px;">
+        <label>You give: $<input type="number" id="trade-from-money" value="0" min="0" style="width:70px;padding:4px;background:#0f1e14;border:1px solid var(--border);border-radius:4px;color:var(--text);" /></label>
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <label>You get: $<input type="number" id="trade-to-money" value="0" min="0" style="width:70px;padding:4px;background:#0f1e14;border:1px solid var(--border);border-radius:4px;color:var(--text);" /></label>
+      </div>
+    </div>
+    ${myProps.length > 0 ? `<label style="display:block;margin-top:10px;font-weight:600;color:var(--text);">Your properties to give:</label>
+    <div id="trade-from-props" style="max-height:100px;overflow-y:auto;padding:4px 0;">${myProps.map(s => `<label style="display:block;font-size:12px;padding:2px 0;"><input type="checkbox" value="${s.id}"> ${s.name}</label>`).join('')}</div>` : ''}
+    <label style="display:block;margin-top:10px;font-weight:600;color:var(--text);">Properties you want:</label>
+    <div id="trade-to-props" style="max-height:100px;overflow-y:auto;padding:4px 0;"></div>
   </div>`;
 
   showModal('🤝 Propose Trade', body, [
@@ -304,10 +334,17 @@ window.openTradeModal = function(gameState, myPlayerId) {
       const fromMoney = parseInt(document.getElementById('trade-from-money').value) || 0;
       const toMoney = parseInt(document.getElementById('trade-to-money').value) || 0;
       const fromProperties = [...(document.getElementById('trade-from-props')?.querySelectorAll('input:checked') || [])].map(i => parseInt(i.value));
-      window.gameActions.offerTrade(targetId, { fromMoney, toMoney, fromProperties });
+      const toProperties = [...(document.getElementById('trade-to-props')?.querySelectorAll('input:checked') || [])].map(i => parseInt(i.value));
+      window.gameActions.offerTrade(targetId, { fromMoney, toMoney, fromProperties, toProperties });
     }},
     { text: 'Cancel', cls: 'btn-gray' }
   ]);
+
+  // Render initial target props and listen for changes
+  renderTargetProps(firstTarget);
+  document.getElementById('trade-target').addEventListener('change', (e) => {
+    renderTargetProps(e.target.value);
+  });
 };
 
 window.showModal = showModal;
