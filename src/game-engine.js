@@ -18,20 +18,20 @@ function rollDice() {
 function createGame(gameId) {
   return {
     id: gameId,
-    phase: 'lobby', // lobby, playing, ended
+    phase: 'lobby',
     players: [],
     currentPlayerIndex: 0,
-    properties: {}, // spaceId -> { ownerId, houses, mortgaged }
+    properties: {},
     chanceCards: shuffle(CHANCE_CARDS),
     communityChestCards: shuffle(COMMUNITY_CHEST_CARDS),
     chanceIndex: 0,
     communityChestIndex: 0,
     freeParkingPot: 0,
     log: [],
-    turnPhase: 'roll', // roll, action, trade, buy, end
+    turnPhase: 'roll',
     lastDice: null,
     doublesCount: 0,
-    pendingAction: null, // { type, data }
+    pendingAction: null,
     trades: [],
     auction: null,
   };
@@ -105,7 +105,6 @@ function movePlayer(game, playerId, steps) {
   const player = game.players.find(p => p.id === playerId);
   const oldPos = player.position;
   player.position = (player.position + steps) % 40;
-  // Collect $200 for passing GO
   if (player.position < oldPos && steps > 0) {
     player.money += 200;
     addLog(game, `${player.name} passed GO and collected $200!`);
@@ -247,7 +246,6 @@ function processLanding(game, playerId, diceTotal, rentMultiplier) {
 
   switch (space.type) {
     case 'go':
-      // Already handled on pass
       break;
     case 'tax':
       player.money -= space.amount;
@@ -313,7 +311,6 @@ function processLanding(game, playerId, diceTotal, rentMultiplier) {
 function checkBankruptcy(game, playerId) {
   const player = game.players.find(p => p.id === playerId);
   if (player.money < 0) {
-    // Check if they can sell/mortgage to cover
     const canRaise = canRaiseFunds(game, playerId);
     if (!canRaise || player.money + canRaise < 0) {
       declareBankruptcy(game, playerId);
@@ -342,7 +339,6 @@ function declareBankruptcy(game, playerId) {
   const player = game.players.find(p => p.id === playerId);
   player.bankrupt = true;
   player.money = 0;
-  // Return all properties to bank
   Object.entries(game.properties).forEach(([spaceId, prop]) => {
     if (prop.ownerId === playerId) {
       delete game.properties[parseInt(spaceId)];
@@ -380,7 +376,6 @@ function buildHouse(game, playerId, spaceId) {
   if (prop.houses >= 5) return { ok: false, msg: "Already has a hotel." };
   if (player.money < space.houseCost) return { ok: false, msg: "Not enough money." };
 
-  // Even build rule: can't have more than 1 house more than other props in group
   const groupProps = getGroupProperties(space.group);
   const minHouses = Math.min(...groupProps.map(p => game.properties[p.id]?.houses || 0));
   if (prop.houses > minHouses) return { ok: false, msg: "Must build evenly across the color group." };
@@ -398,7 +393,6 @@ function sellHouse(game, playerId, spaceId) {
   const prop = game.properties[spaceId];
   if (!prop || prop.ownerId !== playerId || prop.houses === 0) return { ok: false, msg: "No houses to sell." };
 
-  // Even sell rule
   const groupProps = getGroupProperties(space.group);
   const maxHouses = Math.max(...groupProps.map(p => game.properties[p.id]?.houses || 0));
   if (prop.houses < maxHouses) return { ok: false, msg: "Must sell evenly across the color group." };
@@ -458,12 +452,12 @@ function useJailCard(game, playerId) {
 function nextTurn(game) {
   const activePlayers = game.players.filter(p => !p.bankrupt);
   if (activePlayers.length <= 1) { checkWinner(game); return; }
-  
+
   let idx = game.currentPlayerIndex;
   do {
     idx = (idx + 1) % game.players.length;
   } while (game.players[idx].bankrupt);
-  
+
   game.currentPlayerIndex = idx;
   game.turnPhase = 'roll';
   game.doublesCount = 0;
@@ -498,5 +492,5 @@ module.exports = {
   payJailFine, useJailCard,
   nextTurn, addLog, checkBankruptcy,
   ownsAllInGroup, getNetWorth,
-  calculateRent
+  calculateRent, declareBankruptcy
 };

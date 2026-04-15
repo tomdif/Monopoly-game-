@@ -17,7 +17,7 @@
   --lightblue: #87CEEB;
   --pink: #FF69B4;
   --orange: #FF8C00;
-  --purple: #800080; /* Not used but kept for completeness */
+  --purple: #800080;
   --yellow-prop: #FFD700;
   --red-prop: #DC143C;
   --green-prop: #228B22;
@@ -211,7 +211,6 @@ input[type=text]:focus { border-color: var(--green-light); }
 .cell-name { font-size: clamp(5px, 0.9vw, 8px); font-weight: 600; color: #1a3a1a; text-align: center; line-height: 1.2; word-break: break-word; }
 .cell-price { font-size: clamp(4px, 0.8vw, 7px); color: #2a5a2a; }
 
-/* Cell rotations for sides */
 .cell-bottom-side { writing-mode: vertical-rl; text-orientation: mixed; }
 .cell-rotate-left { transform: rotate(180deg); }
 
@@ -270,7 +269,7 @@ input[type=text]:focus { border-color: var(--green-light); }
 .player-item.bankrupt { opacity: 0.4; }
 .player-item .p-token { font-size: 20px; }
 .player-item .p-info { flex: 1; min-width: 0; }
-.player-item .p-name { font-size: 13px; font-weight: 600; truncate: true; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-item .p-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-item .p-money { font-size: 12px; color: #4caf50; font-weight: 600; }
 .player-item .p-pos { font-size: 11px; color: var(--text2); }
 .in-jail-badge { font-size: 10px; background: #c0392b; color: white; border-radius: 3px; padding: 1px 4px; }

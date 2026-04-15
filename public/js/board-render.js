@@ -43,20 +43,14 @@ const BOARD_DATA = [
   { id: 39, name: "Boardwalk", type: "property", color: "darkblue", price: 400, group: 8 },
 ];
 
-// Grid positions [col, row] (1-indexed, 11x11 grid)
-// Bottom row: 0-10, Left col: 11-20, Top row: 21-31, Right col: 32-39
 function getGridPosition(id) {
   if (id <= 10) {
-    // Bottom row: right to left, col = 11-id, row = 11
     return { col: 11 - id, row: 11 };
   } else if (id <= 20) {
-    // Left col: bottom to top, col = 1, row = 11 - (id - 10)
     return { col: 1, row: 11 - (id - 10) };
   } else if (id <= 30) {
-    // Top row: left to right, col = 1 + (id - 20), row = 1
     return { col: 1 + (id - 20), row: 1 };
   } else {
-    // Right col: top to bottom, col = 11, row = 1 + (id - 30)
     return { col: 11, row: 1 + (id - 30) };
   }
 }
@@ -70,7 +64,6 @@ const COLOR_PLAYER = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c
 
 function buildBoard() {
   const board = document.getElementById('monopoly-board');
-  // Clear existing cells (keep center)
   const center = document.getElementById('board-center');
   board.innerHTML = '';
   board.appendChild(center);
@@ -84,17 +77,14 @@ function buildBoard() {
     cell.id = `cell-${space.id}`;
     cell.dataset.spaceId = space.id;
 
-    // Side cells need rotated text
     const isLeft = space.id > 10 && space.id < 20;
     const isRight = space.id > 30;
     const isTop = space.id > 20 && space.id < 30;
     const isBottom = space.id > 0 && space.id < 10;
 
-    // Color bar
     if (space.color) {
       const bar = document.createElement('div');
       bar.className = `cell-color-bar color-${space.color}`;
-      // Bar is at top for bottom row, bottom for top row, left/right for sides
       if (isBottom) {
         bar.style.cssText = 'height:18%;min-height:10px;width:100%;position:absolute;top:0;';
       } else if (isTop) {
@@ -107,7 +97,6 @@ function buildBoard() {
       cell.appendChild(bar);
     }
 
-    // Houses container
     const housesDiv = document.createElement('div');
     housesDiv.className = 'cell-houses';
     housesDiv.id = `houses-${space.id}`;
@@ -117,7 +106,6 @@ function buildBoard() {
     else if (isRight) housesDiv.style.cssText = 'position:absolute;right:2px;';
     cell.appendChild(housesDiv);
 
-    // Cell content
     const contentDiv = document.createElement('div');
     contentDiv.className = 'cell-bottom';
 
@@ -150,7 +138,6 @@ function buildBoard() {
     if (space.price) contentDiv.appendChild(priceEl);
     cell.appendChild(contentDiv);
 
-    // Mortgaged overlay
     const mortgagedDiv = document.createElement('div');
     mortgagedDiv.className = 'mortgaged-overlay';
     mortgagedDiv.id = `mortgaged-${space.id}`;
@@ -158,7 +145,6 @@ function buildBoard() {
     mortgagedDiv.style.display = 'none';
     cell.appendChild(mortgagedDiv);
 
-    // Owner dot
     const ownerDot = document.createElement('div');
     ownerDot.className = 'owner-dot';
     ownerDot.id = `owner-${space.id}`;
@@ -212,7 +198,6 @@ function updateBoardProperties(properties, players) {
 }
 
 function updateTokenPositions(players) {
-  // Remove old tokens
   document.querySelectorAll('.board-token').forEach(t => t.remove());
   const positionCounts = {};
 
@@ -225,8 +210,6 @@ function updateTokenPositions(players) {
 
     const cell = document.getElementById(`cell-${pos}`);
     if (!cell) return;
-    const rect = cell.getBoundingClientRect();
-    const boardRect = document.getElementById('monopoly-board').getBoundingClientRect();
 
     const token = document.createElement('div');
     token.className = 'board-token';

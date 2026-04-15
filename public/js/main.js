@@ -186,7 +186,6 @@ window.onCellClick = function(spaceId) {
     const isMyTurn = _gameState.players[_gameState.currentPlayerIndex]?.id === myPlayerId;
     window.openPropertyModal(space, prop, myPlayerId, _gameState, isMyTurn && isOwner);
   } else if (['property','railroad','utility'].includes(space.type)) {
-    // Unowned — show info
     showModal(space.name, `<strong>${space.name}</strong><br>Price: $${space.price || '?'}<br>Unowned — available for purchase.`, [
       { text: 'Close', cls: 'btn-gray' }
     ]);

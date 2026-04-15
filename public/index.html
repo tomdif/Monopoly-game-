@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Monopoly Online</title>
+<link rel="stylesheet" href="/css/style.css" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+<!-- LOBBY SCREEN -->
+<div id="screen-lobby" class="screen active">
+  <div class="lobby-bg"></div>
+  <div class="lobby-content">
+    <div class="logo">
+      <div class="logo-top">MONOPOLY</div>
+      <div class="logo-sub">ONLINE</div>
+    </div>
+
+    <div class="lobby-card" id="join-form">
+      <h2>Enter Your Name</h2>
+      <input type="text" id="player-name" placeholder="Your name..." maxlength="16" />
+      <div class="token-select">
+        <p>Choose your token:</p>
+        <div class="tokens" id="token-grid"></div>
+      </div>
+      <div class="lobby-btns">
+        <button class="btn btn-green" id="btn-create">🏠 Create Game</button>
+        <div class="or-divider">— or —</div>
+        <div class="join-row">
+          <input type="text" id="game-code" placeholder="Game code..." maxlength="6" style="text-transform:uppercase" />
+          <button class="btn btn-blue" id="btn-join">Join →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lobby-card hidden" id="waiting-room">
+      <div class="room-code-display">
+        <span>Room Code:</span>
+        <strong id="room-code-text"></strong>
+        <button class="btn-copy" id="btn-copy-code">📋 Copy</button>
+      </div>
+      <p class="share-hint">Share this code with friends to join!</p>
+      <div id="player-list-lobby"></div>
+      <button class="btn btn-green hidden" id="btn-start">🎲 Start Game</button>
+      <p id="waiting-msg" class="waiting-msg">Waiting for host to start...</p>
+    </div>
+  </div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="screen-game" class="screen hidden">
+  <div id="game-layout">
+    <!-- Left panel: player info -->
+    <div id="panel-left">
+      <div id="players-panel">
+        <h3>Players</h3>
+        <div id="players-list"></div>
+      </div>
+      <div id="log-panel">
+        <h3>Game Log</h3>
+        <div id="game-log"></div>
+      </div>
+    </div>
+
+    <!-- Center: board -->
+    <div id="board-container">
+      <div id="monopoly-board">
+        <!-- Board cells injected by JS -->
+        <div id="board-center">
+          <div id="center-info">
+            <div class="center-logo">MONOPOLY</div>
+            <div id="free-parking-pot"></div>
+            <div id="dice-display">
+              <span id="dice1" class="die">?</span>
+              <span id="dice2" class="die">?</span>
+            </div>
+            <div id="turn-indicator"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel: actions -->
+    <div id="panel-right">
+      <div id="my-info-panel"></div>
+      <div id="action-panel">
+        <div id="action-btns"></div>
+      </div>
+      <div id="properties-panel">
+        <h3>My Properties</h3>
+        <div id="my-properties-list"></div>
+      </div>
+      <div id="trade-panel" class="hidden">
+        <h3>Trade</h3>
+        <div id="trade-content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WINNER SCREEN -->
+<div id="screen-winner" class="screen hidden">
+  <div class="winner-content">
+    <div class="winner-trophy">🏆</div>
+    <h1 id="winner-name"></h1>
+    <p>WINS THE GAME!</p>
+    <button class="btn btn-green" onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div id="modal-overlay" class="hidden">
+  <div id="modal-box">
+    <div id="modal-title"></div>
+    <div id="modal-body"></div>
+    <div id="modal-btns"></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/board-render.js"></script>
+<script src="/js/game-ui.js"></script>
+<script src="/js/main.js"></script>
+</body>
+</html>

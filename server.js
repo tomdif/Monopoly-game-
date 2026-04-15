@@ -1,322 +1,452 @@
-// game-ui.js - UI rendering for the game
+// server.js - Monopoly multiplayer server
 
-const TOKEN_EMOJIS = ["🎩", "🚂", "🐶", "🚗", "👢", "⛵", "🎯", "🐱"];
-const TOKEN_NAMES = ["Top Hat", "Train", "Dog", "Car", "Boot", "Ship", "Iron", "Cat"];
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 
-const SPACE_NAMES = window.BOARD_DATA ? window.BOARD_DATA.map(s => s.name) : [];
+const engine = require('./src/game-engine');
 
-function renderPlayers(players, currentPlayerIndex, myPlayerId) {
-  const list = document.getElementById('players-list');
-  if (!list) return;
-  list.innerHTML = '';
-  players.forEach((p, i) => {
-    const div = document.createElement('div');
-    div.className = 'player-item' + (i === currentPlayerIndex ? ' active-turn' : '') + (p.bankrupt ? ' bankrupt' : '');
-    div.innerHTML = `
-      <div class="p-token">${p.token}</div>
-      <div class="p-info">
-        <div class="p-name">${p.name}${p.id === myPlayerId ? ' (you)' : ''}${p.isHost ? ' 👑' : ''}</div>
-        <div class="p-money">$${p.money.toLocaleString()}</div>
-        <div class="p-pos">${getSpaceName(p.position)}${p.inJail ? ' <span class="in-jail-badge">IN JAIL</span>' : ''}</div>
-      </div>
-    `;
-    list.appendChild(div);
-  });
-}
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
 
-function getSpaceName(pos) {
-  return (window.BOARD_DATA && window.BOARD_DATA[pos]) ? window.BOARD_DATA[pos].name : `Space ${pos}`;
-}
+app.use(express.static(path.join(__dirname, 'public')));
 
-function renderMyInfo(player) {
-  const panel = document.getElementById('my-info-panel');
-  if (!panel || !player) return;
-  panel.innerHTML = `
-    <div class="my-token">${player.token}</div>
-    <div class="my-name">${player.name}</div>
-    <div class="my-money">$${player.money.toLocaleString()}</div>
-    <div class="my-pos">${getSpaceName(player.position)}${player.inJail ? ' 🚔 IN JAIL' : ''}</div>
-    ${player.jailFreeCards > 0 ? `<div style="font-size:12px;color:#4caf50;margin-top:4px;">🃏 ${player.jailFreeCards}x Get Out of Jail Free</div>` : ''}
-  `;
-}
+// In-memory game store
+const games = {}; // gameId -> game
+const playerGameMap = {}; // socketId -> gameId
+const playerIdMap = {}; // socketId -> playerId
 
-function renderActionButtons(gameState, myPlayerId) {
-  const panel = document.getElementById('action-btns');
-  if (!panel) return;
-  panel.innerHTML = '';
-
-  const myPlayer = gameState.players.find(p => p.id === myPlayerId);
-  if (!myPlayer || myPlayer.bankrupt) return;
-
-  const isMyTurn = gameState.players[gameState.currentPlayerIndex]?.id === myPlayerId;
-  const phase = gameState.turnPhase;
-
-  if (!isMyTurn) {
-    const msg = document.createElement('div');
-    msg.style.cssText = 'font-size:13px;color:var(--text2);text-align:center;padding:10px;';
-    const cp = gameState.players[gameState.currentPlayerIndex];
-    msg.textContent = cp ? `${cp.token} ${cp.name}'s turn...` : 'Waiting...';
-    panel.appendChild(msg);
-    return;
-  }
-
-  // Jail options
-  if (myPlayer.inJail && phase === 'roll') {
-    addBtn(panel, '🎲 Roll (try doubles)', 'btn-blue', () => window.gameActions.rollDice());
-    if (myPlayer.money >= 50) addBtn(panel, '💵 Pay $50 Fine', 'btn-gray', () => window.gameActions.payJail());
-    if (myPlayer.jailFreeCards > 0) addBtn(panel, '🃏 Use Jail Free Card', 'btn-gold', () => window.gameActions.useJailCard());
-    return;
-  }
-
-  if (phase === 'roll') {
-    addBtn(panel, '🎲 Roll Dice', 'btn-green', () => window.gameActions.rollDice());
-  }
-
-  if (phase === 'buy') {
-    const space = window.BOARD_DATA?.[myPlayer.position];
-    if (space) {
-      addBtn(panel, `💰 Buy ${space.name} ($${space.price})`, 'btn-gold', () => window.gameActions.buyProperty());
-      addBtn(panel, '🔨 Auction Instead', 'btn-gray', () => window.gameActions.declineBuy());
-    }
-  }
-
-  if (phase === 'end') {
-    addBtn(panel, '✅ End Turn', 'btn-green', () => window.gameActions.endTurn());
-  }
-
-  // Always available: trade button
-  if (gameState.players.filter(p => !p.bankrupt && p.id !== myPlayerId).length > 0) {
-    addBtn(panel, '🤝 Trade', 'btn-gray btn-sm', () => window.openTradeModal(gameState, myPlayerId));
-  }
-}
-
-function addBtn(parent, text, cls, onClick) {
-  const btn = document.createElement('button');
-  btn.className = `btn ${cls}`;
-  btn.innerHTML = text;
-  btn.onclick = onClick;
-  parent.appendChild(btn);
-}
-
-function renderMyProperties(properties, myPlayerId, gameState) {
-  const list = document.getElementById('my-properties-list');
-  if (!list) return;
-  list.innerHTML = '';
-
-  const myProps = Object.entries(properties)
-    .filter(([, prop]) => prop.ownerId === myPlayerId)
-    .map(([id]) => window.BOARD_DATA?.[parseInt(id)])
-    .filter(Boolean);
-
-  if (myProps.length === 0) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text2)">No properties yet.</div>';
-    return;
-  }
-
-  const isMyTurn = gameState.players[gameState.currentPlayerIndex]?.id === myPlayerId;
-
-  myProps.forEach(space => {
-    const prop = properties[space.id];
-    const div = document.createElement('div');
-    div.className = 'prop-item';
-    const colorMap = { brown:'#8B4513', lightblue:'#87CEEB', pink:'#FF69B4', orange:'#FF8C00', red:'#DC143C', yellow:'#FFD700', green:'#228B22', darkblue:'#00008B' };
-    const dotColor = colorMap[space.color] || (space.type === 'railroad' ? '#555' : '#68a');
-    let houseStr = '';
-    if (prop.houses === 5) houseStr = '🏨 Hotel';
-    else if (prop.houses > 0) houseStr = '🏠'.repeat(prop.houses);
-
-    div.innerHTML = `
-      <div class="prop-color-dot" style="background:${dotColor}"></div>
-      <span class="prop-name">${space.name}</span>
-      ${houseStr ? `<span class="prop-houses-str">${houseStr}</span>` : ''}
-      ${prop.mortgaged ? '<span class="prop-mortgaged-str">MORTGAGED</span>' : ''}
-    `;
-    div.onclick = () => window.openPropertyModal(space, prop, myPlayerId, gameState, isMyTurn);
-    list.appendChild(div);
-  });
-}
-
-function renderLog(log) {
-  const el = document.getElementById('game-log');
-  if (!el) return;
-  el.innerHTML = '';
-  log.slice(0, 15).forEach(entry => {
-    const div = document.createElement('div');
-    div.className = 'log-item';
-    div.textContent = entry.msg;
-    el.appendChild(div);
-  });
-}
-
-function renderDice(dice) {
-  const d1 = document.getElementById('dice1');
-  const d2 = document.getElementById('dice2');
-  if (!d1 || !d2 || !dice) return;
-  const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-  d1.textContent = faces[dice[0]] || dice[0];
-  d2.textContent = faces[dice[1]] || dice[1];
-  d1.classList.add('rolling');
-  d2.classList.add('rolling');
-  setTimeout(() => { d1.classList.remove('rolling'); d2.classList.remove('rolling'); }, 600);
-}
-
-function renderAuction(auction, myPlayerId) {
-  let panel = document.getElementById('auction-panel');
-  if (!auction) {
-    if (panel) panel.remove();
-    return;
-  }
-
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'auction-panel';
-    document.getElementById('action-btns').before(panel);
-  }
-
-  panel.innerHTML = `
-    <h4>🔨 AUCTION: ${auction.spaceName}</h4>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">
-      Current bid: <strong style="color:var(--gold)">$${auction.currentBid}</strong>
-      ${auction.currentBidder ? `by ${window._lastGameState?.players?.find(p=>p.id===auction.currentBidder)?.name || '?'}` : '(none)'}
-    </div>
-    <div class="auction-bid-row">
-      <input type="number" id="bid-amount" placeholder="Your bid" min="${auction.currentBid + 1}" />
-      <button class="btn btn-gold btn-sm" onclick="window.gameActions.placeBid()">Bid</button>
-    </div>
-  `;
-}
-
-function renderTradePending(trades, myPlayerId) {
-  const panel = document.getElementById('trade-panel');
-  const content = document.getElementById('trade-content');
-  if (!panel || !content) return;
-
-  const pending = (trades || []).filter(t => t.to === myPlayerId && t.status === 'pending');
-  if (pending.length === 0) {
-    panel.classList.add('hidden');
-    return;
-  }
-  panel.classList.remove('hidden');
-  content.innerHTML = '';
-  pending.forEach(trade => {
-    const div = document.createElement('div');
-    div.className = 'trade-offer-item';
-    const fromName = window._lastGameState?.players?.find(p=>p.id===trade.from)?.name || '?';
-    const o = trade.offer;
-    let desc = `From ${fromName}:`;
-    if (o.fromMoney) desc += ` They give $${o.fromMoney}`;
-    if (o.toMoney) desc += ` You give $${o.toMoney}`;
-    if (o.fromProperties?.length) desc += ` + ${o.fromProperties.length} prop(s)`;
-    if (o.toProperties?.length) desc += ` for ${o.toProperties.length} prop(s)`;
-    div.innerHTML = `<div style="font-size:12px;margin-bottom:6px;">${desc}</div>
-      <div class="trade-btns">
-        <button class="btn btn-green btn-sm" onclick="window.gameActions.acceptTrade('${trade.id}')">Accept</button>
-        <button class="btn btn-red btn-sm" onclick="window.gameActions.rejectTrade('${trade.id}')">Reject</button>
-      </div>`;
-    content.appendChild(div);
-  });
-}
-
-function showModal(title, body, buttons) {
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML = body;
-  const btnsEl = document.getElementById('modal-btns');
-  btnsEl.innerHTML = '';
-  buttons.forEach(b => {
-    const btn = document.createElement('button');
-    btn.className = `btn ${b.cls || 'btn-gray'}`;
-    btn.textContent = b.text;
-    btn.onclick = () => { hideModal(); b.action?.(); };
-    btnsEl.appendChild(btn);
-  });
-  document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-function hideModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-}
-
-window.openPropertyModal = function(space, prop, myPlayerId, gameState, isMyTurn) {
-  const houseCosts = { brown:50, lightblue:50, pink:100, orange:100, red:150, yellow:150, green:200, darkblue:200 };
-  const rentTable = {
-    1: [2,10,30,90,160,250], 2: [6,30,90,270,400,550], 3: [10,50,150,450,625,750],
-    4: [14,70,200,550,750,950], 5: [18,90,250,700,875,1050], 6: [22,110,330,800,975,1150],
-    7: [26,130,390,900,1100,1275], 8: [35,175,500,1100,1300,1500]
+function getPublicGame(game) {
+  return {
+    id: game.id,
+    phase: game.phase,
+    players: game.players,
+    currentPlayerIndex: game.currentPlayerIndex,
+    properties: game.properties,
+    log: game.log.slice(0, 20),
+    turnPhase: game.turnPhase,
+    lastDice: game.lastDice,
+    doublesCount: game.doublesCount,
+    freeParkingPot: game.freeParkingPot,
+    pendingAction: game.pendingAction,
+    auction: game.auction,
+    winner: game.winner || null,
   };
+}
 
-  const rents = space.group ? rentTable[space.group] : null;
-  const currentHouses = prop.houses || 0;
-  const houseLabel = currentHouses === 5 ? '🏨 Hotel' : currentHouses > 0 ? `🏠×${currentHouses}` : 'No buildings';
+function emitGameState(gameId) {
+  const game = games[gameId];
+  if (!game) return;
+  io.to(gameId).emit('game_state', getPublicGame(game));
+}
 
-  let body = `<strong>${space.name}</strong><br>`;
-  body += `<span style="color:var(--text2)">Status: ${prop.mortgaged ? '⚠️ MORTGAGED' : '✅ Active'}</span><br>`;
-  body += `<span style="color:var(--text2)">Buildings: ${houseLabel}</span><br>`;
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
 
-  if (rents) {
-    body += `<br><strong>Rent Table:</strong><br>`;
-    const labels = ['Unimproved','1 House','2 Houses','3 Houses','4 Houses','Hotel'];
-    rents.forEach((r, i) => {
-      body += `<span style="font-size:12px;color:${i===currentHouses?'#4caf50':'var(--text2)'}">${labels[i]}: $${r}</span><br>`;
-    });
-  }
+  // Create a new game room
+  socket.on('create_game', ({ playerName, tokenIndex }) => {
+    const gameId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const playerId = uuidv4();
+    const game = engine.createGame(gameId);
+    const player = engine.createPlayer(playerId, playerName || 'Player 1', tokenIndex || 0);
+    player.isHost = true;
+    game.players.push(player);
+    games[gameId] = game;
+    playerGameMap[socket.id] = gameId;
+    playerIdMap[socket.id] = playerId;
+    socket.join(gameId);
+    socket.emit('joined_game', { gameId, playerId, isHost: true });
+    emitGameState(gameId);
+    engine.addLog(game, `${player.name} created the game.`);
+  });
 
-  const btns = [{ text: 'Close', cls: 'btn-gray' }];
+  // Join existing game
+  socket.on('join_game', ({ gameId, playerName, tokenIndex }) => {
+    const game = games[gameId];
+    if (!game) { socket.emit('error', 'Game not found.'); return; }
+    if (game.phase !== 'lobby') { socket.emit('error', 'Game already started.'); return; }
+    if (game.players.length >= 8) { socket.emit('error', 'Game is full.'); return; }
 
-  if (isMyTurn && !prop.mortgaged && space.color && currentHouses < 5) {
-    btns.unshift({ text: `🏠 Build (+$${houseCosts[space.color] || 100})`, cls: 'btn-green', action: () => window.gameActions.buildHouse(space.id) });
-  }
-  if (isMyTurn && currentHouses > 0) {
-    btns.push({ text: `🔨 Sell House (+$${Math.floor((houseCosts[space.color]||100)/2)})`, cls: 'btn-gold', action: () => window.gameActions.sellHouse(space.id) });
-  }
-  if (!prop.mortgaged && currentHouses === 0) {
-    btns.push({ text: '📉 Mortgage', cls: 'btn-red', action: () => window.gameActions.mortgage(space.id) });
-  }
-  if (prop.mortgaged) {
-    btns.push({ text: '📈 Unmortgage', cls: 'btn-gold', action: () => window.gameActions.unmortgage(space.id) });
-  }
+    const usedTokens = game.players.map(p => p.token);
+    let ti = tokenIndex;
+    while (usedTokens.includes(engine.TOKEN_EMOJIS[ti])) {
+      ti = (ti + 1) % engine.TOKEN_EMOJIS.length;
+    }
 
-  showModal(space.name, body, btns);
-};
+    const playerId = uuidv4();
+    const player = engine.createPlayer(playerId, playerName || `Player ${game.players.length + 1}`, ti);
+    game.players.push(player);
+    playerGameMap[socket.id] = gameId;
+    playerIdMap[socket.id] = playerId;
+    socket.join(gameId);
+    socket.emit('joined_game', { gameId, playerId, isHost: false });
+    engine.addLog(game, `${player.name} joined the game.`);
+    emitGameState(gameId);
+  });
 
-window.openTradeModal = function(gameState, myPlayerId) {
-  const others = gameState.players.filter(p => !p.bankrupt && p.id !== myPlayerId);
-  if (others.length === 0) return;
+  // Rejoin game (on reconnect)
+  socket.on('rejoin_game', ({ gameId, playerId }) => {
+    const game = games[gameId];
+    if (!game) { socket.emit('error', 'Game not found.'); return; }
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) { socket.emit('error', 'Player not found.'); return; }
+    playerGameMap[socket.id] = gameId;
+    playerIdMap[socket.id] = playerId;
+    socket.join(gameId);
+    socket.emit('joined_game', { gameId, playerId, isHost: player.isHost });
+    emitGameState(gameId);
+  });
 
-  const myProps = Object.entries(gameState.properties)
-    .filter(([, prop]) => prop.ownerId === myPlayerId)
-    .map(([id]) => window.BOARD_DATA?.[parseInt(id)])
-    .filter(Boolean);
+  // Start game (host only)
+  socket.on('start_game', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const player = game.players.find(p => p.id === playerId);
+    if (!player?.isHost) { socket.emit('error', 'Only host can start.'); return; }
+    if (game.players.length < 2) { socket.emit('error', 'Need at least 2 players.'); return; }
+    game.phase = 'playing';
+    game.turnPhase = 'roll';
+    engine.addLog(game, `🎲 Game started with ${game.players.length} players!`);
+    emitGameState(gameId);
+  });
 
-  let body = `<div style="font-size:13px;">
-    <label>Trade with:</label>
-    <select id="trade-target" style="width:100%;margin:8px 0;padding:8px;background:#0f1e14;border:1px solid var(--border);border-radius:6px;color:var(--text);">
-      ${others.map(p => `<option value="${p.id}">${p.token} ${p.name}</option>`).join('')}
-    </select>
-    <label>You give money: $<input type="number" id="trade-from-money" value="0" min="0" style="width:80px;padding:4px;background:#0f1e14;border:1px solid var(--border);border-radius:4px;color:var(--text);" /></label>
-    <br><label>You receive money: $<input type="number" id="trade-to-money" value="0" min="0" style="width:80px;padding:4px;margin-top:8px;background:#0f1e14;border:1px solid var(--border);border-radius:4px;color:var(--text);" /></label>
-    ${myProps.length > 0 ? `<br><label style="display:block;margin-top:8px;">Your properties to give:</label>
-    <div id="trade-from-props">${myProps.map(s => `<label style="display:block;font-size:12px;"><input type="checkbox" value="${s.id}"> ${s.name}</label>`).join('')}</div>` : ''}
-  </div>`;
+  // Roll dice
+  socket.on('roll_dice', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game || game.phase !== 'playing') return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) { socket.emit('error', 'Not your turn.'); return; }
+    if (game.turnPhase !== 'roll') { socket.emit('error', 'Cannot roll now.'); return; }
 
-  showModal('🤝 Propose Trade', body, [
-    { text: 'Send Offer', cls: 'btn-green', action: () => {
-      const targetId = document.getElementById('trade-target').value;
-      const fromMoney = parseInt(document.getElementById('trade-from-money').value) || 0;
-      const toMoney = parseInt(document.getElementById('trade-to-money').value) || 0;
-      const fromProperties = [...(document.getElementById('trade-from-props')?.querySelectorAll('input:checked') || [])].map(i => parseInt(i.value));
-      window.gameActions.offerTrade(targetId, { fromMoney, toMoney, fromProperties });
-    }},
-    { text: 'Cancel', cls: 'btn-gray' }
-  ]);
-};
+    const [d1, d2] = engine.rollDice();
+    const total = d1 + d2;
+    const isDoubles = d1 === d2;
+    game.lastDice = [d1, d2];
+    engine.addLog(game, `${currentPlayer.name} rolled ${d1}+${d2}=${total}${isDoubles ? ' (doubles!)' : ''}`);
 
-window.showModal = showModal;
-window.hideModal = hideModal;
-window.renderPlayers = renderPlayers;
-window.renderMyInfo = renderMyInfo;
-window.renderActionButtons = renderActionButtons;
-window.renderMyProperties = renderMyProperties;
-window.renderLog = renderLog;
-window.renderDice = renderDice;
-window.renderAuction = renderAuction;
-window.renderTradePending = renderTradePending;
+    // Jail handling
+    if (currentPlayer.inJail) {
+      currentPlayer.jailTurns++;
+      if (isDoubles) {
+        currentPlayer.inJail = false;
+        currentPlayer.jailTurns = 0;
+        engine.addLog(game, `${currentPlayer.name} rolled doubles and got out of Jail!`);
+        engine.movePlayer(game, playerId, total);
+      } else if (currentPlayer.jailTurns >= 3) {
+        if (currentPlayer.money >= 50) {
+          currentPlayer.money -= 50;
+          game.freeParkingPot += 50;
+          currentPlayer.inJail = false;
+          currentPlayer.jailTurns = 0;
+          engine.addLog(game, `${currentPlayer.name} paid $50 fine after 3 turns in Jail.`);
+          engine.movePlayer(game, playerId, total);
+        } else {
+          engine.declareBankruptcy(game, playerId);
+          emitGameState(gameId);
+          return;
+        }
+      } else {
+        engine.addLog(game, `${currentPlayer.name} is stuck in Jail (turn ${currentPlayer.jailTurns}/3).`);
+        game.turnPhase = 'end';
+        emitGameState(gameId);
+        return;
+      }
+    } else {
+      // Check for 3 doubles = jail
+      if (isDoubles) {
+        game.doublesCount++;
+        if (game.doublesCount >= 3) {
+          engine.sendToJail(game, playerId);
+          game.turnPhase = 'end';
+          emitGameState(gameId);
+          return;
+        }
+      } else {
+        game.doublesCount = 0;
+      }
+      engine.movePlayer(game, playerId, total);
+    }
+
+    // Process landing
+    const landResult = engine.processLanding(game, playerId, total);
+
+    // Handle card redirects
+    if (landResult.cardResult?.needsLanding) {
+      const newLand = engine.processLanding(game, playerId, total, landResult.cardResult.rentMultiplier);
+      if (newLand.action === 'can_buy') {
+        game.turnPhase = 'buy';
+        game.pendingAction = { type: 'buy', spaceId: currentPlayer.position };
+      } else {
+        game.turnPhase = isDoubles && !currentPlayer.inJail ? 'roll' : 'end';
+      }
+    } else if (landResult.action === 'can_buy') {
+      game.turnPhase = 'buy';
+      game.pendingAction = { type: 'buy', spaceId: currentPlayer.position };
+    } else if (landResult.action === 'jail') {
+      game.turnPhase = 'end';
+    } else {
+      game.turnPhase = isDoubles && !currentPlayer.inJail ? 'roll' : 'end';
+    }
+
+    emitGameState(gameId);
+  });
+
+  // Buy property
+  socket.on('buy_property', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game || game.turnPhase !== 'buy') return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) return;
+
+    const spaceId = currentPlayer.position;
+    const ok = engine.buyProperty(game, playerId, spaceId);
+    if (ok) {
+      const isDoubles = game.lastDice && game.lastDice[0] === game.lastDice[1];
+      game.turnPhase = isDoubles && !currentPlayer.inJail ? 'roll' : 'end';
+      game.pendingAction = null;
+    }
+    emitGameState(gameId);
+  });
+
+  // Decline to buy (start auction)
+  socket.on('decline_buy', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game || game.turnPhase !== 'buy') return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) return;
+
+    const spaceId = currentPlayer.position;
+    const space = engine.BOARD_SPACES[spaceId];
+    // Start auction
+    game.auction = {
+      spaceId,
+      spaceName: space.name,
+      price: space.price,
+      currentBid: 0,
+      currentBidder: null,
+      bids: {},
+      phase: 'bidding',
+    };
+    engine.addLog(game, `🔨 Auction started for ${space.name}! Starting bid: $1`);
+    const isDoubles = game.lastDice && game.lastDice[0] === game.lastDice[1];
+    game.turnPhase = isDoubles && !currentPlayer.inJail ? 'roll' : 'end';
+    game.pendingAction = null;
+    emitGameState(gameId);
+  });
+
+  // Place bid in auction
+  socket.on('place_bid', ({ amount }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game || !game.auction) return;
+    const player = game.players.find(p => p.id === playerId);
+    if (!player || player.bankrupt) return;
+    if (amount <= game.auction.currentBid) { socket.emit('error', 'Bid must be higher.'); return; }
+    if (amount > player.money) { socket.emit('error', 'Not enough money.'); return; }
+
+    game.auction.currentBid = amount;
+    game.auction.currentBidder = playerId;
+    game.auction.bids[playerId] = amount;
+    engine.addLog(game, `${player.name} bids $${amount} for ${game.auction.spaceName}`);
+    emitGameState(gameId);
+  });
+
+  // End auction
+  socket.on('end_auction', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game || !game.auction) return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) { socket.emit('error', 'Only current player ends auction.'); return; }
+
+    const auction = game.auction;
+    if (auction.currentBidder && auction.currentBid > 0) {
+      const winner = game.players.find(p => p.id === auction.currentBidder);
+      winner.money -= auction.currentBid;
+      game.properties[auction.spaceId] = { ownerId: auction.currentBidder, houses: 0, mortgaged: false };
+      engine.addLog(game, `🔨 ${winner.name} won the auction for ${auction.spaceName} at $${auction.currentBid}!`);
+    } else {
+      engine.addLog(game, `No bids placed — ${auction.spaceName} stays with the bank.`);
+    }
+    game.auction = null;
+    emitGameState(gameId);
+  });
+
+  // End turn
+  socket.on('end_turn', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) return;
+    if (game.turnPhase !== 'end') return;
+    engine.nextTurn(game);
+    const next = game.players[game.currentPlayerIndex];
+    engine.addLog(game, `▶ It's ${next.name}'s turn.`);
+    emitGameState(gameId);
+  });
+
+  // Build house
+  socket.on('build_house', ({ spaceId }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const result = engine.buildHouse(game, playerId, spaceId);
+    if (!result.ok) socket.emit('error', result.msg);
+    emitGameState(gameId);
+  });
+
+  // Sell house
+  socket.on('sell_house', ({ spaceId }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const result = engine.sellHouse(game, playerId, spaceId);
+    if (!result.ok) socket.emit('error', result.msg);
+    emitGameState(gameId);
+  });
+
+  // Mortgage
+  socket.on('mortgage', ({ spaceId }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const result = engine.mortgageProperty(game, playerId, spaceId);
+    if (!result.ok) socket.emit('error', result.msg);
+    emitGameState(gameId);
+  });
+
+  // Unmortgage
+  socket.on('unmortgage', ({ spaceId }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const result = engine.unmortgageProperty(game, playerId, spaceId);
+    if (!result.ok) socket.emit('error', result.msg);
+    emitGameState(gameId);
+  });
+
+  // Pay jail fine
+  socket.on('pay_jail', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) return;
+    const ok = engine.payJailFine(game, playerId);
+    if (!ok) socket.emit('error', 'Cannot pay jail fine right now.');
+    emitGameState(gameId);
+  });
+
+  // Use jail free card
+  socket.on('use_jail_card', () => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) return;
+    const ok = engine.useJailCard(game, playerId);
+    if (!ok) socket.emit('error', 'No jail free card available.');
+    emitGameState(gameId);
+  });
+
+  // Offer trade
+  socket.on('offer_trade', ({ targetPlayerId, offer }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const tradeId = uuidv4();
+    game.trades = game.trades || [];
+    game.trades.push({ id: tradeId, from: playerId, to: targetPlayerId, offer, status: 'pending' });
+    io.to(gameId).emit('trade_offer', { tradeId, from: playerId, to: targetPlayerId, offer });
+    engine.addLog(game, `${game.players.find(p=>p.id===playerId)?.name} offered a trade.`);
+    emitGameState(gameId);
+  });
+
+  // Accept trade
+  socket.on('accept_trade', ({ tradeId }) => {
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const trade = game.trades?.find(t => t.id === tradeId);
+    if (!trade || trade.to !== playerId) return;
+
+    const fromPlayer = game.players.find(p => p.id === trade.from);
+    const toPlayer = game.players.find(p => p.id === trade.to);
+    const { offer } = trade;
+
+    // Transfer money
+    if (offer.fromMoney) { fromPlayer.money -= offer.fromMoney; toPlayer.money += offer.fromMoney; }
+    if (offer.toMoney) { toPlayer.money -= offer.toMoney; fromPlayer.money += offer.toMoney; }
+
+    // Transfer properties
+    if (offer.fromProperties) {
+      offer.fromProperties.forEach(sid => {
+        if (game.properties[sid]?.ownerId === trade.from) {
+          game.properties[sid].ownerId = trade.to;
+        }
+      });
+    }
+    if (offer.toProperties) {
+      offer.toProperties.forEach(sid => {
+        if (game.properties[sid]?.ownerId === trade.to) {
+          game.properties[sid].ownerId = trade.from;
+        }
+      });
+    }
+
+    trade.status = 'accepted';
+    engine.addLog(game, `🤝 Trade accepted between ${fromPlayer.name} and ${toPlayer.name}.`);
+    emitGameState(gameId);
+  });
+
+  // Reject trade
+  socket.on('reject_trade', ({ tradeId }) => {
+    const gameId = playerGameMap[socket.id];
+    const game = games[gameId];
+    if (!game) return;
+    const trade = game.trades?.find(t => t.id === tradeId);
+    if (trade) trade.status = 'rejected';
+    io.to(gameId).emit('trade_rejected', { tradeId });
+    emitGameState(gameId);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+    const gameId = playerGameMap[socket.id];
+    const playerId = playerIdMap[socket.id];
+    if (gameId && playerId) {
+      const game = games[gameId];
+      if (game) {
+        const player = game.players.find(p => p.id === playerId);
+        if (player) engine.addLog(game, `${player.name} disconnected.`);
+        emitGameState(gameId);
+      }
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Monopoly server running on port ${PORT}`));
