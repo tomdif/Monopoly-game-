@@ -173,6 +173,8 @@ function renderAuction(auction, myPlayerId) {
     document.getElementById('action-btns').before(panel);
   }
 
+  const isCurrentPlayer = window._lastGameState?.players?.[window._lastGameState.currentPlayerIndex]?.id === myPlayerId;
+
   panel.innerHTML = `
     <h4>🔨 AUCTION: ${auction.spaceName}</h4>
     <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">
@@ -183,6 +185,7 @@ function renderAuction(auction, myPlayerId) {
       <input type="number" id="bid-amount" placeholder="Your bid" min="${auction.currentBid + 1}" />
       <button class="btn btn-gold btn-sm" onclick="window.gameActions.placeBid()">Bid</button>
     </div>
+    ${isCurrentPlayer ? `<button class="btn btn-red btn-sm" style="margin-top:8px;width:100%;" onclick="window.gameActions.endAuction()">🔨 End Auction</button>` : ''}
   `;
 }
 

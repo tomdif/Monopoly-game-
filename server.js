@@ -33,6 +33,7 @@ function getPublicGame(game) {
     freeParkingPot: game.freeParkingPot,
     pendingAction: game.pendingAction,
     auction: game.auction,
+    trades: game.trades || [],
     winner: game.winner || null,
   };
 }
